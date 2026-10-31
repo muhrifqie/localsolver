@@ -4,3 +4,7 @@ camoufox[geoip]>=0.4.11
 httpx>=0.27
 loguru>=0.7
 python-dotenv>=1.0
+# free pure-HTTP solvers: GeeTest v4, Lemin, ARCaptcha, reCAPTCHA v3-HTTP
+PyPasser[speech,vision]>=1.1
+# Friendly Captcha uses the vendored Go solver in thirdparty/ -> build to bin/friendlycaptcha.exe (Go 1.21+):
+#   cd thirdparty/friendlycaptcha && go build -o ../../bin/friendlycaptcha.exe ./cmd

@@ -80,3 +80,29 @@ Belum: `/clearance` (butuh target ber-challenge Cloudflare milik owner).
 - [ ] AWS WAF `/aws-token` (ada di Boterdrop, belum di-port).
 - [ ] Arkose/FunCaptcha (ada di agathasangkara, belum di-port).
 - [ ] Verifikasi workaround `add_init_script` kalau pindah ke solver berbasis itu.
+
+---
+
+## Tambahan tipe captcha (1 Nov 2026) — PyPasser + Friendly Go
+
+Divalidasi dari **demo live 2captcha + verify token server-side** (bukan klaim):
+
+| Endpoint | Tipe | Engine | Hasil demo |
+|---|---|---|---|
+| `/geetest` | GeeTest v4 (slide/ai/winlinze/match/icon/voice/svg) | PyPasser (HTTP, httpx) | **10/10 PASS** |
+| `/lemin` | Lemin Cropped (jigsaw) | PyPasser (vision: pillow+numpy) | PASS (~3s) |
+| `/arcaptcha` | ARCaptcha puzzle | PyPasser (HTTP) | PASS (puzzle+hidden) |
+| `/recaptchav3http` | reCAPTCHA v3 dari anchor_url | PyPasser (HTTP murni) | pola terbukti (free) |
+| `/friendlycaptcha` | Friendly Captcha v2 (PoW) | binary Go `thirdparty/friendlycaptcha` | PASS (token 6k char) |
+
+- **Gratis, pool-less:** GeeTest/Lemin/ARCaptcha/v3http jalan lewat `run_http_task` (tanpa camoufox page). Cap terpisah `HTTP_CAPACITY` (default 10).
+- **reCAPTCHA v3 free fallback:** kalau `/recaptchav3` dikasih `anchor_url`, pas browser solve gagal → PyPasser HTTP (gratis) **sebelum** CapSolver (bayar). Urutan: lokal → pypasser-free → capsolver.
+- **Varian voice/icon** (GeeTest nine/icon/svg, ARCaptcha 9-grid) butuh extra `speech` (vosk + model ~40MB, auto-download sekali). Sudah di `requirements.txt` (`PyPasser[speech,vision]`).
+- **Friendly binary:** rebuild `cd thirdparty/friendlycaptcha && go build -o ../../bin/friendlycaptcha.exe ./cmd` (Go 1.21+). main.go di-patch supaya print token PENUH (upstream motong `token[:100]`). Butuh Go toolchain di mesin.
+
+### DITOLAK setelah validasi (jangan buang waktu ngejar gratis):
+- **MTCaptcha** — SHELVED (bukan OCR!). Protokol+fold+kee udah di-reverse & match Go, tapi `kt`/kee butuh **timing ketikan manusia** asli (instan → `verified:false` walau jawaban benar; timing tebakan → code 1432). Kedua repo publik incomplete. Groundwork + next-step di `C:\BOT\models\mtcaptcha-re\STATUS.md`. Butuh sesi RE khusus.
+- **DataDome/Akamai/Kasada** — satu-satunya kredibel `Hyper-Solutions` = **API BAYAR** (jual sensor). Free-nya mati.
+- **hCaptcha grid** — solver gambar free gak reliable/umur pendek; yang mateng = NopeCHA (bayar).
+- **Aliyun slider** — nol repo kredibel di GitHub. **Tencent TCaptcha** — cuma 0★ fork, gak teruji.
+- **AWS WAF** — ada (Boterdrop camoufox, free) tapi browser-berat + butuh IP bagus; belum diwire.

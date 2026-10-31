@@ -27,6 +27,7 @@ class SolverServer:
         self.pool = BrowserPool(HEADLESS, THREAD, PAGE_COUNT)
         self.results: dict = {}
         self.current_task_num = 0
+        self.http_task_num = 0   # pool-less (PyPasser/Go) solves
 
         STATIC_DIR.mkdir(parents=True, exist_ok=True)
         self.app = FastAPI(title="localsolver", version="0.1.0", lifespan=self._lifespan)
@@ -35,6 +36,9 @@ class SolverServer:
 
     def decrement_task(self):
         self.current_task_num = max(0, self.current_task_num - 1)
+
+    def decrement_http(self):
+        self.http_task_num = max(0, self.http_task_num - 1)
 
     @asynccontextmanager
     async def _lifespan(self, app):

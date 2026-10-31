@@ -5,3 +5,8 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# built Go solver binary (rebuild from thirdparty/) + speech models
+bin/*.exe
+*.vosk
+vosk-model*/

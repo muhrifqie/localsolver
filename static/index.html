@@ -246,6 +246,11 @@ const EPS=[
   ["GET","/recaptchav2",[["url",1],["sitekey",1]],"reCAPTCHA v2 checkbox token"],
   ["GET","/recaptchav2invisible",[["url",1],["sitekey",1]],"reCAPTCHA v2 invisible token"],
   ["GET","/recaptchav3",[["url",1],["sitekey",1],["action",0],["min_score",0]],"reCAPTCHA v3 token"],
+  ["GET","/recaptchav3http",[["anchor_url",1]],"reCAPTCHA v3 via pure HTTP (free, no browser)"],
+  ["GET","/geetest",[["captcha_id",1],["risk_type",0]],"GeeTest v4 seccode (free, HTTP)"],
+  ["GET","/lemin",[["captcha_id",1],["domain",1]],"Lemin Cropped token (free, HTTP)"],
+  ["GET","/arcaptcha",[["sitekey",1],["domain",1]],"ARCaptcha token (free, HTTP)"],
+  ["GET","/friendlycaptcha",[["sitekey",1],["proxy",0]],"Friendly Captcha v2 token (free, Go PoW)"],
   ["GET","/result",[["id",1]],"Fetch a task result by id"],
   ["GET","/health",[],"Service status, capacity, fallback flag"],
 ];
@@ -263,6 +268,10 @@ const CAPS=[
   ["reCAPTCHA v2","checkbox","ok","tested"],
   ["reCAPTCHA v2 invisible","auto-execute","ok","tested"],
   ["reCAPTCHA v3","score token","ok","tested"],
+  ["GeeTest v4","slide/ai/icon/voice","ok","tested"],
+  ["Lemin Cropped","jigsaw (CV)","ok","tested"],
+  ["ARCaptcha","puzzle","ok","tested"],
+  ["Friendly Captcha","v2 proof-of-work","ok","tested"],
   ["CapSolver fallback","paid API, on-demand","wip","opt-in"],
 ];
 document.getElementById('capGrid').innerHTML=CAPS.map(([n,s,b,bl])=>`

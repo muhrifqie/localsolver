@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Super friendly</title>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@friendlycaptcha/sdk@0.1.36/site.min.js" async
+            defer></script>
+    <script nomodule src="https://cdn.jsdelivr.net/npm/@friendlycaptcha/sdk@0.1.36/site.compat.min.js" async
+            defer></script>
+</head>
+<body>
+<div id="captcha-widget" class="frc-captcha" data-sitekey="FCMU08117KKFLBRL"></div>
+<pre id="result"></pre>
+
+<script>
+    const widget = document.getElementById("captcha-widget");
+    const result = document.getElementById("result");
+
+    widget.addEventListener("frc:widget.complete", async function (event) {
+        const response = event.detail.response;
+        result.textContent = "Verifying...";
+
+        try {
+            // NOTE: Calling siteverify from the client exposes your API key.
+            // In production, send the token to your own backend and verify there.
+            const res = await fetch("http://localhost:8000/verify", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    response: response
+                })
+            });
+            const data = await res.json();
+            result.textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+            result.textContent = "Error: " + err.message;
+        }
+    });
+</script>
+</body>
+</html>

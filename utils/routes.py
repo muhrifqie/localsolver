@@ -10,9 +10,9 @@ from fastapi import Query
 from fastapi.responses import JSONResponse, FileResponse
 
 from utils.logger import logger
-from utils.solvers import run_task
-from utils.config import RESULT_TTL, STATIC_DIR
-from utils import fallback
+from utils.solvers import run_task, run_http_task
+from utils.config import RESULT_TTL, STATIC_DIR, HTTP_CAPACITY
+from utils import fallback, pypasser_solvers
 
 
 def _submit(server, name: str, required: dict, **params):
@@ -32,6 +32,22 @@ def _submit(server, name: str, required: dict, **params):
     return JSONResponse({"task_id": task_id, "status": "accepted"}, status_code=202)
 
 
+def _submit_http(server, name: str, required: dict, solver, **params):
+    """Spawn a pool-less (PyPasser/Go) solve. Capacity gated separately from the browser pool."""
+    missing = [k for k, v in required.items() if not v]
+    if missing:
+        return JSONResponse({"status": "error", "error": f"Required: {', '.join(missing)}"}, status_code=400)
+    if server.http_task_num >= HTTP_CAPACITY:
+        return JSONResponse({"status": "error", "error": "Server at max capacity"}, status_code=429)
+    task_id = str(uuid.uuid4())
+    server.http_task_num += 1
+    logger.info(f"New {name} task: {task_id}")
+    asyncio.create_task(
+        run_http_task(name, task_id, server.results, solver, server.decrement_http, **params)
+    )
+    return JSONResponse({"task_id": task_id, "status": "accepted"}, status_code=202)
+
+
 def register_routes(app, server):
 
     @app.get("/", include_in_schema=False)
@@ -41,7 +57,10 @@ def register_routes(app, server):
     @app.get("/health")
     async def health():
         return {"status": "ok", "capacity": server.pool.capacity,
-                "in_flight": server.current_task_num, "fallback": fallback.available()}
+                "in_flight": server.current_task_num, "http_in_flight": server.http_task_num,
+                "fallback": fallback.available(),
+                "pypasser_free": pypasser_solvers.pypasser_available(),
+                "friendly": pypasser_solvers.friendly_available()}
 
     @app.get("/turnstile")
     async def turnstile(url: str = Query(...), sitekey: str = Query(...),
@@ -65,9 +84,37 @@ def register_routes(app, server):
 
     @app.get("/recaptchav3")
     async def recaptcha_v3(url: str = Query(...), sitekey: str = Query(...),
-                           action: str = Query("verify"), min_score: float = Query(None)):
+                           action: str = Query("verify"), min_score: float = Query(None),
+                           anchor_url: str = Query(None)):
+        # anchor_url (optional): enables the free PyPasser HTTP fallback if the browser solve fails
         return _submit(server, "recaptcha_v3", {"url": url, "sitekey": sitekey},
-                       url=url, sitekey=sitekey, action=action, min_score=min_score)
+                       url=url, sitekey=sitekey, action=action, min_score=min_score, anchor_url=anchor_url)
+
+    # --- free PyPasser / Go solvers (pure HTTP, no browser) ---
+    @app.get("/recaptchav3http")
+    async def recaptcha_v3_http(anchor_url: str = Query(...)):
+        return _submit_http(server, "recaptcha_v3_http", {"anchor_url": anchor_url},
+                            pypasser_solvers.solve_recaptcha_v3_http, anchor_url=anchor_url)
+
+    @app.get("/geetest")
+    async def geetest(captcha_id: str = Query(...), risk_type: str = Query(None)):
+        return _submit_http(server, "geetest_v4", {"captcha_id": captcha_id},
+                            pypasser_solvers.solve_geetest, captcha_id=captcha_id, risk_type=risk_type)
+
+    @app.get("/lemin")
+    async def lemin(captcha_id: str = Query(...), domain: str = Query(...)):
+        return _submit_http(server, "lemin", {"captcha_id": captcha_id, "domain": domain},
+                            pypasser_solvers.solve_lemin, captcha_id=captcha_id, domain=domain)
+
+    @app.get("/arcaptcha")
+    async def arcaptcha(sitekey: str = Query(...), domain: str = Query(...)):
+        return _submit_http(server, "arcaptcha", {"sitekey": sitekey, "domain": domain},
+                            pypasser_solvers.solve_arcaptcha, sitekey=sitekey, domain=domain)
+
+    @app.get("/friendlycaptcha")
+    async def friendlycaptcha(sitekey: str = Query(...), proxy: str = Query(None)):
+        return _submit_http(server, "friendly", {"sitekey": sitekey},
+                            pypasser_solvers.solve_friendly, sitekey=sitekey, proxy=proxy)
 
     @app.get("/result")
     async def result(task_id: str = Query(..., alias="id")):

@@ -8,8 +8,8 @@ import time
 import asyncio
 
 from utils.logger import logger
-from utils.config import SOLVE_TIMEOUT
-from utils import fallback
+from utils.config import SOLVE_TIMEOUT, PYPASSER_FREE
+from utils import fallback, pypasser_solvers
 from utils.templates import (
     HTML_TEMPLATE,
     RECAPTCHA_V3_TEMPLATE,
@@ -55,7 +55,7 @@ async def _attempt_turnstile(page, url, sitekey, action=None, cdata=None):
     return None
 
 
-async def _attempt_recaptcha_v3(page, url, sitekey, action="verify", min_score=None):
+async def _attempt_recaptcha_v3(page, url, sitekey, action="verify", min_score=None, **_):
     url = _with_slash(url)
     await _serve(page, url, RECAPTCHA_V3_TEMPLATE.format(sitekey=sitekey, action=action))
     for _ in range(60):
@@ -140,9 +140,17 @@ async def run_task(name: str, task_id: str, results: dict, pool, decrement, **pa
         decrement()
 
     source = "local"
+    # free tier first: PyPasser HTTP for reCAPTCHA v3 when an anchor_url was supplied
+    if (not token and name == "recaptcha_v3" and PYPASSER_FREE
+            and params.get("anchor_url") and pypasser_solvers.pypasser_available()):
+        logger.info(f"{name} local failed -> trying PyPasser free (HTTP), task {task_id}")
+        token = await pypasser_solvers.solve_recaptcha_v3_http(params["anchor_url"])
+        if token:
+            source = "pypasser-free"
+    # paid tier last
     if not token and fb_type and fallback.available():
-        logger.info(f"{name} local failed -> trying CapSolver fallback, task {task_id}")
-        token = await fallback.solve_via_api(fb_type, **params)
+        logger.info(f"{name} free failed -> trying CapSolver fallback, task {task_id}")
+        token = await fallback.solve_via_api(fb_type, **{k: v for k, v in params.items() if k != "anchor_url"})
         source = "capsolver"
 
     elapsed = round(time.time() - start, 3)
@@ -150,6 +158,34 @@ async def run_task(name: str, task_id: str, results: dict, pool, decrement, **pa
         results[task_id] = {"status": "success", "value": token, "source": source,
                             "elapsed_time": elapsed, "start_time": start}
         logger.success(f"{name} solved via {source}, task {task_id}, {elapsed}s")
+    else:
+        results[task_id] = {"status": "error", "value": f"{name}_fail",
+                            "elapsed_time": elapsed, "start_time": start}
+        logger.warning(f"{name} failed, task {task_id}, {elapsed}s")
+
+
+# ----------------------------------------------------------------------------- HTTP runner
+
+async def run_http_task(name: str, task_id: str, results: dict, solver, decrement_http, **params):
+    """Runner for pool-less solvers (PyPasser HTTP / Friendly Go). No browser page,
+    no CapSolver fallback — these types are already free/specialized."""
+    start = time.time()
+    results[task_id] = {"status": "process", "message": f"solving {name}", "start_time": start}
+    token = None
+    try:
+        token = await asyncio.wait_for(solver(**params), timeout=SOLVE_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.warning(f"{name} hard-timeout, task {task_id}")
+    except Exception as e:  # noqa: BLE001 - one bad solve must not kill anything
+        logger.exception(f"{name} crashed, task {task_id}: {e}")
+    finally:
+        decrement_http()
+
+    elapsed = round(time.time() - start, 3)
+    if token:
+        results[task_id] = {"status": "success", "value": token, "source": "pypasser-free",
+                            "elapsed_time": elapsed, "start_time": start}
+        logger.success(f"{name} solved (free), task {task_id}, {elapsed}s")
     else:
         results[task_id] = {"status": "error", "value": f"{name}_fail",
                             "elapsed_time": elapsed, "start_time": start}
