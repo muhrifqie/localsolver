@@ -7,11 +7,11 @@ import uuid
 import asyncio
 
 from fastapi import Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from utils.logger import logger
 from utils.solvers import run_task
-from utils.config import RESULT_TTL
+from utils.config import RESULT_TTL, STATIC_DIR
 from utils import fallback
 
 
@@ -33,6 +33,10 @@ def _submit(server, name: str, required: dict, **params):
 
 
 def register_routes(app, server):
+
+    @app.get("/", include_in_schema=False)
+    async def console():
+        return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/health")
     async def health():
